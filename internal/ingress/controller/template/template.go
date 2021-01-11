@@ -395,12 +395,14 @@ func enforceRegexModifier(input interface{}) bool {
 
 // buildLocation produces the location string, if the ingress has redirects
 // (specified through the nginx.ingress.kubernetes.io/rewrite-target annotation)
-func buildLocation(input interface{}, enforceRegex bool) string {
+func buildLocation(input interface{}, allEnforceRegex bool) string {
 	location, ok := input.(*ingress.Location)
 	if !ok {
 		klog.Errorf("expected an '*ingress.Location' type but %T was returned", input)
 		return slash
 	}
+
+	enforceRegex := needsRewrite(location) || location.Rewrite.UseRegex
 
 	path := location.Path
 	if enforceRegex {
@@ -410,8 +412,14 @@ func buildLocation(input interface{}, enforceRegex bool) string {
 	if location.PathType != nil && *location.PathType == networkingv1beta1.PathTypeExact {
 		return fmt.Sprintf(`= %s`, path)
 	}
+	prefix := ""
+	if allEnforceRegex {
+		// if some location other than this is regex, then use "^~ ". so that has a high priority.
+		prefix = "^~ "
 
-	return path
+	}
+
+	return prefix + path
 }
 
 func buildAuthLocation(input interface{}, globalExternalAuthURL string) string {
